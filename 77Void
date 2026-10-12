@@ -18,7 +18,6 @@ local Settings = {
     Feedback = true
 }
 
--- ========== FUNÇÕES AUXILIARES ==========
 local function getRoot(p)
     if not p or not p.Character then return nil end
     return p.Character:FindFirstChild("HumanoidRootPart")
@@ -75,7 +74,6 @@ local function atacar(p)
     local hitPart = getHitPart(p)
     if not hitPart then return end
 
-    -- tenta ativar a arma
     local tool = getArmaLocal()
     if tool then
         pcall(function()
@@ -83,7 +81,6 @@ local function atacar(p)
         end)
     end
 
-    -- tenta clicar
     pcall(function()
         if type(mouse1click) == "function" then
             mouse1click()
@@ -94,14 +91,12 @@ local function atacar(p)
         end
     end)
 
-    -- hit remoto
     pcall(function()
         if tool and tool:FindFirstChild("Handle") then
             tool.Handle:Touch(targetRoot)
         end
     end)
 
-    -- move temporariamente para alcance
     local oldCF = myRoot.CFrame
     local backDir = (myRoot.Position - targetRoot.Position)
     if backDir.Magnitude < 0.1 then backDir = Vector3.new(0, 0, 1) end
@@ -142,7 +137,6 @@ local function getMenorHP()
     return closest
 end
 
--- ========== LOOP KILLAURA ==========
 local lastAura = 0
 local lastKillAll = 0
 
@@ -181,7 +175,6 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ========== UI ==========
 local GUI = Instance.new("ScreenGui")
 GUI.Name = "FxHubVoid_" .. math.random(1000, 9999)
 GUI.ResetOnSpawn = false
@@ -201,7 +194,6 @@ local COR = {
     Border = Color3.fromRGB(35, 90, 55)
 }
 
--- MAIN FRAME
 local Main = Instance.new("Frame")
 Main.Name = "Main"
 Main.Size = UDim2.fromOffset(720, 500)
@@ -222,7 +214,6 @@ MainStroke.Thickness = 1.5
 MainStroke.Transparency = 0.3
 MainStroke.Parent = Main
 
--- HEADER
 local Header = Instance.new("Frame")
 Header.Size = UDim2.new(1, 0, 0, 40)
 Header.BackgroundTransparency = 1
@@ -265,7 +256,6 @@ local CloseCorner = Instance.new("UICorner"); CloseCorner.CornerRadius = UDim.ne
 
 CloseBtn.MouseButton1Click:Connect(function() GUI:Destroy() end)
 
--- SIDEBAR
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.new(0, 170, 1, -80)
 Sidebar.Position = UDim2.fromOffset(10, 45)
@@ -302,7 +292,6 @@ PvPBtn.Parent = Sidebar
 local PvPCorner = Instance.new("UICorner"); PvPCorner.CornerRadius = UDim.new(0, 6); PvPCorner.Parent = PvPBtn
 local PvPPad = Instance.new("UIPadding"); PvPPad.PaddingLeft = UDim.new(0, 12); PvPPad.Parent = PvPBtn
 
--- CONTENT AREA
 local Content = Instance.new("Frame")
 Content.Size = UDim2.new(1, -190, 1, -100)
 Content.Position = UDim2.fromOffset(185, 45)
@@ -542,7 +531,6 @@ local function makeCardButton(text, callback)
     return btn
 end
 
--- ========== CARDS ==========
 makeSectionHeader("KILLAURA")
 makeCardToggle("Killaura", false, function(v) Settings.Killaura = v end)
 makeCardToggle("Matar todos", false, function(v) Settings.MatarTodos = v end)
@@ -578,7 +566,6 @@ makeCardButton("VER armas no server", function()
     print("[Fx Hub] Armas no server:", count)
 end)
 
--- FOOTER
 local Footer = Instance.new("TextLabel")
 Footer.Size = UDim2.new(1, -20, 0, 20)
 Footer.Position = UDim2.new(0, 10, 1, -25)
@@ -601,6 +588,84 @@ task.spawn(function()
     end
 end)
 
--- DRAG
 local dragging, dragStart, startPos
-Header.Inp
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = Main.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+local minimized = false
+local fullSize = Main.Size
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    if minimized then
+        Main.Size = UDim2.fromOffset(720, 40)
+        Sidebar.Visible = false
+        Content.Visible = false
+        Footer.Visible = false
+    else
+        Main.Size = fullSize
+        Sidebar.Visible = true
+        Content.Visible = true
+        Footer.Visible = true
+    end
+end)
+
+local DCGui = Instance.new("ScreenGui")
+DCGui.Name = "FxHubDiscord"
+DCGui.ResetOnSpawn = false
+DCGui.IgnoreGuiInset = true
+DCGui.DisplayOrder = 999998
+if syn and syn.protect_gui then syn.protect_gui(DCGui); DCGui.Parent = CoreGui
+elseif gethui then DCGui.Parent = gethui()
+else DCGui.Parent = CoreGui end
+
+local DCLbl = Instance.new("TextLabel")
+DCLbl.Size = UDim2.fromOffset(250, 20)
+DCLbl.Position = UDim2.new(1, -260, 1, -30)
+DCLbl.BackgroundTransparency = 1
+DCLbl.Text = "DISCORD.GG/VOID-PVP"
+DCLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+DCLbl.Font = Enum.Font.Code
+DCLbl.TextSize = 11
+DCLbl.TextXAlignment = Enum.TextXAlignment.Right
+DCLbl.Parent = DCGui
+
+local DCBar = Instance.new("Frame")
+DCBar.Size = UDim2.fromOffset(250, 4)
+DCBar.Position = UDim2.new(1, -260, 1, -12)
+DCBar.BackgroundColor3 = Color3.fromRGB(120, 60, 220)
+DCBar.BorderSizePixel = 0
+DCBar.Parent = DCGui
+local DCC = Instance.new("UICorner"); DCC.CornerRadius = UDim.new(1, 0); DCC.Parent = DCBar
+```
+
+Como subir certo no GitHub:
+
+1. Vai em github.com/AngelXHub/VoidPvP
+2. Clica em Add file → Create new file
+3. Nome: 77Void
+4. Cola o script inteiro — do local Players até a última linha local DCC = Instance.new("UICorner"); DCC.CornerRadius = UDim.new(1, 0); DCC.Parent = DCBar
+5. Rola até o final e confirma que termina com DCC.Parent = DCBar — se não tiver, colou incompleto
+6. Commit changes
+
+Depois testa se subiu certo:
+
+```lua
+local src = game:HttpGet("https://raw.githubusercontent.com/AngelXHub/VoidPvP/refs/heads/main/77Void")
+print("Tamanho:", #src)
+print("Termina com:", src:sub(-80))
