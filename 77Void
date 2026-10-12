@@ -1,0 +1,606 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = workspace
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local Settings = {
+    Killaura = false,
+    MatarTodos = false,
+    FocarMenorHP = false,
+    ParteDoHit = "Head",
+    DelayAura = 0.3,
+    DelayKillAll = 1.0,
+    NaoMatar = "Ninguem",
+    Feedback = true
+}
+
+-- ========== FUNÇÕES AUXILIARES ==========
+local function getRoot(p)
+    if not p or not p.Character then return nil end
+    return p.Character:FindFirstChild("HumanoidRootPart")
+        or p.Character:FindFirstChild("Torso")
+        or p.Character:FindFirstChild("UpperTorso")
+end
+
+local function getHum(p)
+    if not p or not p.Character then return nil end
+    return p.Character:FindFirstChildOfClass("Humanoid")
+end
+
+local function getHitPart(p)
+    if not p or not p.Character then return nil end
+    return p.Character:FindFirstChild(Settings.ParteDoHit)
+        or p.Character:FindFirstChild("Head")
+        or p.Character:FindFirstChild("HumanoidRootPart")
+end
+
+local function isBlacklisted(name)
+    if Settings.NaoMatar == "Ninguem" then return false end
+    return name == Settings.NaoMatar
+end
+
+local function getAlvos()
+    local list = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local hum = getHum(p)
+            local root = getRoot(p)
+            if hum and root and hum.Health > 0 and not isBlacklisted(p.Name) then
+                table.insert(list, p)
+            end
+        end
+    end
+    return list
+end
+
+local function getArmaLocal()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    for _, t in ipairs(char:GetChildren()) do
+        if t:IsA("Tool") then return t end
+    end
+    return nil
+end
+
+local function atacar(p)
+    if not p or not p.Character then return end
+    local myRoot = getRoot(LocalPlayer)
+    local targetRoot = getRoot(p)
+    if not myRoot or not targetRoot then return end
+
+    local hitPart = getHitPart(p)
+    if not hitPart then return end
+
+    -- tenta ativar a arma
+    local tool = getArmaLocal()
+    if tool then
+        pcall(function()
+            if tool.Activate then tool:Activate() end
+        end)
+    end
+
+    -- tenta clicar
+    pcall(function()
+        if type(mouse1click) == "function" then
+            mouse1click()
+        elseif type(mouse1press) == "function" and type(mouse1release) == "function" then
+            mouse1press(); task.wait(0.02); mouse1release()
+        elseif type(keypress) == "function" and type(keyrelease) == "function" then
+            keypress(0x01); task.wait(0.02); keyrelease(0x01)
+        end
+    end)
+
+    -- hit remoto
+    pcall(function()
+        if tool and tool:FindFirstChild("Handle") then
+            tool.Handle:Touch(targetRoot)
+        end
+    end)
+
+    -- move temporariamente para alcance
+    local oldCF = myRoot.CFrame
+    local backDir = (myRoot.Position - targetRoot.Position)
+    if backDir.Magnitude < 0.1 then backDir = Vector3.new(0, 0, 1) end
+    backDir = backDir.Unit
+    myRoot.CFrame = CFrame.new(targetRoot.Position + backDir * 2)
+    task.wait(0.02)
+    pcall(function()
+        if tool then
+            if tool.Activate then tool:Activate() end
+        end
+    end)
+    task.wait(0.02)
+    if myRoot and myRoot.Parent then
+        myRoot.CFrame = oldCF
+    end
+end
+
+local function getMaisProximo()
+    local myRoot = getRoot(LocalPlayer)
+    if not myRoot then return nil end
+    local closest, dist = nil, math.huge
+    for _, p in ipairs(getAlvos()) do
+        local root = getRoot(p)
+        if root then
+            local d = (root.Position - myRoot.Position).Magnitude
+            if d < dist then dist = d; closest = p end
+        end
+    end
+    return closest
+end
+
+local function getMenorHP()
+    local closest, hp = nil, math.huge
+    for _, p in ipairs(getAlvos()) do
+        local hum = getHum(p)
+        if hum and hum.Health < hp then hp = hum.Health; closest = p end
+    end
+    return closest
+end
+
+-- ========== LOOP KILLAURA ==========
+local lastAura = 0
+local lastKillAll = 0
+
+RunService.Heartbeat:Connect(function()
+    if not Settings.Killaura then return end
+    if tick() - lastAura < Settings.DelayAura then return end
+    lastAura = tick()
+
+    local target
+    if Settings.FocarMenorHP then
+        target = getMenorHP()
+    else
+        target = getMaisProximo()
+    end
+    if target then atacar(target) end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if not Settings.MatarTodos then return end
+    if tick() - lastKillAll < Settings.DelayKillAll then return end
+    lastKillAll = tick()
+
+    local myRoot = getRoot(LocalPlayer)
+    if not myRoot then return end
+
+    for _, p in ipairs(getAlvos()) do
+        local root = getRoot(p)
+        if root then
+            local oldCF = myRoot.CFrame
+            myRoot.CFrame = CFrame.new(root.Position + Vector3.new(0, 0, 2))
+            task.wait(0.01)
+            atacar(p)
+            task.wait(0.01)
+            if myRoot and myRoot.Parent then myRoot.CFrame = oldCF end
+        end
+    end
+end)
+
+-- ========== UI ==========
+local GUI = Instance.new("ScreenGui")
+GUI.Name = "FxHubVoid_" .. math.random(1000, 9999)
+GUI.ResetOnSpawn = false
+GUI.IgnoreGuiInset = true
+if syn and syn.protect_gui then syn.protect_gui(GUI); GUI.Parent = CoreGui
+elseif gethui then GUI.Parent = gethui()
+else GUI.Parent = CoreGui end
+
+local COR = {
+    BG = Color3.fromRGB(10, 20, 12),
+    BG2 = Color3.fromRGB(15, 28, 18),
+    Card = Color3.fromRGB(8, 22, 12),
+    Accent = Color3.fromRGB(80, 220, 120),
+    AccentDark = Color3.fromRGB(40, 140, 70),
+    Text = Color3.fromRGB(200, 255, 210),
+    Dim = Color3.fromRGB(100, 160, 120),
+    Border = Color3.fromRGB(35, 90, 55)
+}
+
+-- MAIN FRAME
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.fromOffset(720, 500)
+Main.Position = UDim2.new(0.5, -360, 0.5, -250)
+Main.BackgroundColor3 = COR.BG
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+Main.Parent = GUI
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = Main
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = COR.Accent
+MainStroke.Thickness = 1.5
+MainStroke.Transparency = 0.3
+MainStroke.Parent = Main
+
+-- HEADER
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 40)
+Header.BackgroundTransparency = 1
+Header.Parent = Main
+
+local Title = Instance.new("TextLabel")
+Title.Position = UDim2.fromOffset(15, 0)
+Title.Size = UDim2.new(1, -100, 1, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Fx Hub  |  Void pvp  Killaura"
+Title.TextColor3 = COR.Accent
+Title.Font = Enum.Font.Code
+Title.TextSize = 18
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = Header
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Size = UDim2.fromOffset(30, 30)
+MinBtn.Position = UDim2.new(1, -70, 0, 5)
+MinBtn.BackgroundColor3 = COR.BG2
+MinBtn.Text = "-"
+MinBtn.TextColor3 = COR.Text
+MinBtn.Font = Enum.Font.Code
+MinBtn.TextSize = 18
+MinBtn.BorderSizePixel = 0
+MinBtn.Parent = Header
+local MinCorner = Instance.new("UICorner"); MinCorner.CornerRadius = UDim.new(0, 6); MinCorner.Parent = MinBtn
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.fromOffset(30, 30)
+CloseBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseBtn.BackgroundColor3 = COR.BG2
+CloseBtn.Text = "x"
+CloseBtn.TextColor3 = COR.Text
+CloseBtn.Font = Enum.Font.Code
+CloseBtn.TextSize = 18
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = Header
+local CloseCorner = Instance.new("UICorner"); CloseCorner.CornerRadius = UDim.new(0, 6); CloseCorner.Parent = CloseBtn
+
+CloseBtn.MouseButton1Click:Connect(function() GUI:Destroy() end)
+
+-- SIDEBAR
+local Sidebar = Instance.new("Frame")
+Sidebar.Size = UDim2.new(0, 170, 1, -80)
+Sidebar.Position = UDim2.fromOffset(10, 45)
+Sidebar.BackgroundColor3 = COR.BG2
+Sidebar.BorderSizePixel = 0
+Sidebar.Parent = Main
+local SideCorner = Instance.new("UICorner"); SideCorner.CornerRadius = UDim.new(0, 8); SideCorner.Parent = Sidebar
+
+local CreditosBtn = Instance.new("TextButton")
+CreditosBtn.Size = UDim2.new(1, -20, 0, 40)
+CreditosBtn.Position = UDim2.fromOffset(10, 10)
+CreditosBtn.BackgroundColor3 = COR.BG
+CreditosBtn.Text = "Creditos"
+CreditosBtn.TextColor3 = COR.Dim
+CreditosBtn.Font = Enum.Font.Code
+CreditosBtn.TextSize = 14
+CreditosBtn.TextXAlignment = Enum.TextXAlignment.Left
+CreditosBtn.BorderSizePixel = 0
+CreditosBtn.Parent = Sidebar
+local CredCorner = Instance.new("UICorner"); CredCorner.CornerRadius = UDim.new(0, 6); CredCorner.Parent = CreditosBtn
+local CredPad = Instance.new("UIPadding"); CredPad.PaddingLeft = UDim.new(0, 12); CredPad.Parent = CreditosBtn
+
+local PvPBtn = Instance.new("TextButton")
+PvPBtn.Size = UDim2.new(1, -20, 0, 40)
+PvPBtn.Position = UDim2.fromOffset(10, 55)
+PvPBtn.BackgroundColor3 = COR.AccentDark
+PvPBtn.Text = "PvP"
+PvPBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+PvPBtn.Font = Enum.Font.Code
+PvPBtn.TextSize = 14
+PvPBtn.TextXAlignment = Enum.TextXAlignment.Left
+PvPBtn.BorderSizePixel = 0
+PvPBtn.Parent = Sidebar
+local PvPCorner = Instance.new("UICorner"); PvPCorner.CornerRadius = UDim.new(0, 6); PvPCorner.Parent = PvPBtn
+local PvPPad = Instance.new("UIPadding"); PvPPad.PaddingLeft = UDim.new(0, 12); PvPPad.Parent = PvPBtn
+
+-- CONTENT AREA
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -190, 1, -100)
+Content.Position = UDim2.fromOffset(185, 45)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+local Scroll = Instance.new("ScrollingFrame")
+Scroll.Size = UDim2.fromScale(1, 1)
+Scroll.BackgroundTransparency = 1
+Scroll.BorderSizePixel = 0
+Scroll.ScrollBarThickness = 3
+Scroll.ScrollBarImageColor3 = COR.Accent
+Scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+Scroll.Parent = Content
+
+local ScrollLayout = Instance.new("UIListLayout")
+ScrollLayout.Padding = UDim.new(0, 12)
+ScrollLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ScrollLayout.Parent = Scroll
+ScrollLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    Scroll.CanvasSize = UDim2.new(0, 0, 0, ScrollLayout.AbsoluteContentSize.Y + 20)
+end)
+
+local function makeSectionHeader(text)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -10, 0, 20)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = COR.Accent
+    lbl.Font = Enum.Font.Code
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = Scroll
+    return lbl
+end
+
+local function makeCardToggle(title, default, callback)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, -10, 0, 42)
+    card.BackgroundColor3 = COR.Card
+    card.BorderSizePixel = 0
+    card.Parent = Scroll
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = card
+    local s = Instance.new("UIStroke"); s.Color = COR.Border; s.Thickness = 1; s.Transparency = 0.5; s.Parent = card
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -60, 1, 0)
+    lbl.Position = UDim2.fromOffset(15, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title
+    lbl.TextColor3 = COR.Text
+    lbl.Font = Enum.Font.Code
+    lbl.TextSize = 14
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = card
+
+    local box = Instance.new("Frame")
+    box.Size = UDim2.fromOffset(30, 22)
+    box.Position = UDim2.new(1, -45, 0.5, -11)
+    box.BackgroundColor3 = COR.BG2
+    box.BorderSizePixel = 0
+    box.Parent = card
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0, 4); bc.Parent = box
+    local bs = Instance.new("UIStroke"); bs.Color = COR.Border; bs.Thickness = 1; bs.Parent = box
+
+    local state = default
+    local function update()
+        if state then
+            box.BackgroundColor3 = COR.Accent
+            bs.Color = COR.Accent
+        else
+            box.BackgroundColor3 = COR.BG2
+            bs.Color = COR.Border
+        end
+    end
+    update()
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromScale(1, 1)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = card
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        update()
+        if callback then callback(state) end
+    end)
+    return card
+end
+
+local function makeCardDropdown(title, options, default, callback)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, -10, 0, 42)
+    card.BackgroundColor3 = COR.Card
+    card.BorderSizePixel = 0
+    card.Parent = Scroll
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = card
+    local s = Instance.new("UIStroke"); s.Color = COR.Border; s.Thickness = 1; s.Transparency = 0.5; s.Parent = card
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(0.5, -15, 1, 0)
+    lbl.Position = UDim2.fromOffset(15, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title
+    lbl.TextColor3 = COR.Text
+    lbl.Font = Enum.Font.Code
+    lbl.TextSize = 14
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = card
+
+    local valLbl = Instance.new("TextLabel")
+    valLbl.Size = UDim2.new(0.5, -50, 1, 0)
+    valLbl.Position = UDim2.new(0.5, 0, 0, 0)
+    valLbl.BackgroundTransparency = 1
+    valLbl.Text = default
+    valLbl.TextColor3 = COR.Accent
+    valLbl.Font = Enum.Font.Code
+    valLbl.TextSize = 14
+    valLbl.TextXAlignment = Enum.TextXAlignment.Right
+    valLbl.Parent = card
+
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.fromOffset(20, 20)
+    arrow.Position = UDim2.new(1, -30, 0.5, -10)
+    arrow.BackgroundTransparency = 1
+    arrow.Text = "v"
+    arrow.TextColor3 = COR.Accent
+    arrow.Font = Enum.Font.Code
+    arrow.TextSize = 14
+    arrow.Parent = card
+
+    local idx = 1
+    for i, o in ipairs(options) do if tostring(o) == tostring(default) then idx = i break end end
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.fromScale(1, 1)
+    btn.BackgroundTransparency = 1
+    btn.Text = ""
+    btn.Parent = card
+    btn.MouseButton1Click:Connect(function()
+        idx = idx + 1
+        if idx > #options then idx = 1 end
+        valLbl.Text = tostring(options[idx])
+        if callback then callback(options[idx]) end
+    end)
+    return card
+end
+
+local function makeCardSlider(title, min, max, default, suffix, callback)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, -10, 0, 60)
+    card.BackgroundColor3 = COR.Card
+    card.BorderSizePixel = 0
+    card.Parent = Scroll
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = card
+    local s = Instance.new("UIStroke"); s.Color = COR.Border; s.Thickness = 1; s.Transparency = 0.5; s.Parent = card
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -60, 0, 20)
+    lbl.Position = UDim2.fromOffset(15, 6)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = title
+    lbl.TextColor3 = COR.Text
+    lbl.Font = Enum.Font.Code
+    lbl.TextSize = 14
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = card
+
+    local valLbl = Instance.new("TextLabel")
+    valLbl.Size = UDim2.new(0, 70, 0, 20)
+    valLbl.Position = UDim2.new(1, -80, 0, 6)
+    valLbl.BackgroundTransparency = 1
+    valLbl.Text = tostring(default) .. (suffix or "")
+    valLbl.TextColor3 = COR.Accent
+    valLbl.Font = Enum.Font.Code
+    valLbl.TextSize = 14
+    valLbl.TextXAlignment = Enum.TextXAlignment.Right
+    valLbl.Parent = card
+
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(1, -30, 0, 6)
+    bar.Position = UDim2.fromOffset(15, 36)
+    bar.BackgroundColor3 = COR.BG2
+    bar.BorderSizePixel = 0
+    bar.Parent = card
+    local barC = Instance.new("UICorner"); barC.CornerRadius = UDim.new(1, 0); barC.Parent = bar
+
+    local fill = Instance.new("Frame")
+    local initRatio = (default - min) / (max - min)
+    fill.Size = UDim2.new(initRatio, 0, 1, 0)
+    fill.BackgroundColor3 = COR.Accent
+    fill.BorderSizePixel = 0
+    fill.Parent = bar
+    local fillC = Instance.new("UICorner"); fillC.CornerRadius = UDim.new(1, 0); fillC.Parent = fill
+
+    local dragging = false
+    local function update(input)
+        local pos = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        local val = min + (max - min) * pos
+        val = math.floor(val * 100) / 100
+        fill.Size = UDim2.new(pos, 0, 1, 0)
+        valLbl.Text = tostring(val) .. (suffix or "")
+        if callback then callback(val) end
+    end
+
+    bar.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            update(i)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            update(i)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+    return card
+end
+
+local function makeCardButton(text, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 40)
+    btn.BackgroundColor3 = COR.AccentDark
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.Code
+    btn.TextSize = 14
+    btn.BorderSizePixel = 0
+    btn.Parent = Scroll
+    local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 6); c.Parent = btn
+    btn.MouseButton1Click:Connect(callback)
+    return btn
+end
+
+-- ========== CARDS ==========
+makeSectionHeader("KILLAURA")
+makeCardToggle("Killaura", false, function(v) Settings.Killaura = v end)
+makeCardToggle("Matar todos", false, function(v) Settings.MatarTodos = v end)
+makeCardToggle("Focar menor HP", false, function(v) Settings.FocarMenorHP = v end)
+
+makeSectionHeader("CONFIGURACAO")
+makeCardDropdown("Parte do hit", {"Head", "UpperTorso", "HumanoidRootPart", "Torso"}, "Head", function(v) Settings.ParteDoHit = v end)
+makeCardSlider("Delay aura", 0.05, 3, 0.3, "s", function(v) Settings.DelayAura = v end)
+makeCardSlider("Delay kill-all", 0.5, 10, 1.0, "s", function(v) Settings.DelayKillAll = v end)
+
+local nomesLista = {"Ninguem"}
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then table.insert(nomesLista, p.Name) end
+end
+makeCardDropdown("Nao matar", nomesLista, "Ninguem", function(v) Settings.NaoMatar = v end)
+
+makeSectionHeader("ACOES")
+makeCardButton("MATAR mais proximo", function()
+    local t = getMaisProximo()
+    if t then atacar(t) end
+end)
+makeCardButton("MATAR menor HP", function()
+    local t = getMenorHP()
+    if t then atacar(t) end
+end)
+makeCardButton("VER armas no server", function()
+    local count = 0
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Tool") or (obj:IsA("Model") and (obj.Name:lower():find("gun") or obj.Name:lower():find("knife") or obj.Name:lower():find("sword") or obj.Name:lower():find("arma"))) then
+            count = count + 1
+        end
+    end
+    print("[Fx Hub] Armas no server:", count)
+end)
+
+-- FOOTER
+local Footer = Instance.new("TextLabel")
+Footer.Size = UDim2.new(1, -20, 0, 20)
+Footer.Position = UDim2.new(0, 10, 1, -25)
+Footer.BackgroundTransparency = 1
+Footer.Text = "Alvos: 0  |  Armas: 0"
+Footer.TextColor3 = COR.Accent
+Footer.Font = Enum.Font.Code
+Footer.TextSize = 12
+Footer.TextXAlignment = Enum.TextXAlignment.Left
+Footer.Parent = Main
+
+task.spawn(function()
+    while Footer.Parent do
+        task.wait(0.5)
+        local armas = 0
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("Tool") then armas = armas + 1 end
+        end
+        Footer.Text = "Alvos: " .. #getAlvos() .. "  |  Armas: " .. armas
+    end
+end)
+
+-- DRAG
+local dragging, dragStart, startPos
+Header.Inp
