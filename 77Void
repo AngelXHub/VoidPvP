@@ -229,10 +229,14 @@ local function criarTag(player)
     lbl.TextColor3 = info.cor
     lbl.TextStrokeTransparency = 0
     lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-    lbl.TextStrokeThickness = 2
     lbl.Font = Enum.Font.GothamBold
     lbl.TextScaled = true
     lbl.Parent = bb
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(0, 0, 0)
+    stroke.Thickness = 2
+    stroke.Parent = lbl
 end
 
 local function removeTag(player)
